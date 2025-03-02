@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { FileUp, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { FileUploadState } from '@/types';
+import { processFileData } from '@/utils/dataProcessor';
 
 interface FileUploadProps {
   onUploadComplete: () => void;
@@ -41,7 +42,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
     handleUpload(file);
   };
 
-  const handleUpload = (file: File) => {
+  const handleUpload = async (file: File) => {
     setState({
       ...state,
       isUploading: true,
@@ -50,34 +51,91 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       success: false,
     });
 
-    // Simulate file upload with progress
+    // Show initial processing
     let progress = 0;
-    const interval = setInterval(() => {
+    const progressInterval = setInterval(() => {
       progress += 5;
-      setState((prev) => ({
-        ...prev,
-        progress,
-      }));
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          setState({
-            isUploading: false,
-            progress: 100,
-            error: null,
-            success: true,
-          });
-          
-          toast({
-            title: 'Upload successful',
-            description: 'Your file has been processed successfully.',
-          });
-          
-          onUploadComplete();
-        }, 500);
+      if (progress <= 60) { // Only go up to 60% until actual processing is complete
+        setState((prev) => ({
+          ...prev,
+          progress,
+        }));
       }
     }, 150);
+
+    try {
+      // Process the file data
+      const success = await processFileData(file);
+      
+      // Clear the interval
+      clearInterval(progressInterval);
+      
+      if (success) {
+        // Complete the progress animation
+        setState({
+          isUploading: true,
+          progress: 70,
+          error: null,
+          success: false,
+        });
+        
+        // Simulate AI processing time
+        setTimeout(() => {
+          setState({
+            isUploading: true,
+            progress: 85,
+            error: null,
+            success: false,
+          });
+          
+          setTimeout(() => {
+            setState({
+              isUploading: false,
+              progress: 100,
+              error: null,
+              success: true,
+            });
+            
+            toast({
+              title: 'Upload successful',
+              description: 'Your file has been processed successfully.',
+            });
+            
+            onUploadComplete();
+          }, 800);
+        }, 1000);
+      } else {
+        clearInterval(progressInterval);
+        setState({
+          isUploading: false,
+          progress: 0,
+          error: 'Failed to process the file. Please try again.',
+          success: false,
+        });
+        
+        toast({
+          title: 'Processing failed',
+          description: 'Failed to process the file. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      setState({
+        isUploading: false,
+        progress: 0,
+        error: 'An error occurred during processing. Please try again.',
+        success: false,
+      });
+      
+      toast({
+        title: 'Processing error',
+        description: 'An error occurred during processing. Please try again.',
+        variant: 'destructive',
+      });
+      
+      console.error('File processing error:', error);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
