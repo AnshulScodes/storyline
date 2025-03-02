@@ -450,39 +450,39 @@ const generateMockText = (prompt: string, topic: string): string => {
     if (prompt.includes('power')) segment = 'power';
     if (prompt.includes('risk')) segment = 'atrisk';
     
-    return fallbacks.persona[segment];
+    return fallbacks.persona[segment as keyof typeof fallbacks.persona];
   } else if (prompt.includes('pain point')) {
     let segment = 'occasional';
     if (prompt.includes('power')) segment = 'power';
     if (prompt.includes('risk')) segment = 'atrisk';
     
-    return fallbacks.painPoints[segment].join(', ');
+    return fallbacks.painPoints[segment as keyof typeof fallbacks.painPoints].join(', ');
   } else if (prompt.includes('goal')) {
     let segment = 'occasional';
     if (prompt.includes('power')) segment = 'power';
     if (prompt.includes('risk')) segment = 'atrisk';
     
-    return fallbacks.goals[segment].join(', ');
+    return fallbacks.goals[segment as keyof typeof fallbacks.goals].join(', ');
   } else if (prompt.includes('story')) {
     let segment = 'occasional';
     if (prompt.includes('power')) segment = 'power';
     if (prompt.includes('risk')) segment = 'atrisk';
     
-    return fallbacks.stories[segment];
+    return fallbacks.stories[segment as keyof typeof fallbacks.stories];
   } else if (prompt.includes('insight')) {
     let category = 'product';
     if (prompt.includes('onboarding')) category = 'onboarding';
     if (prompt.includes('engagement')) category = 'engagement';
     if (prompt.includes('support')) category = 'support';
     
-    return fallbacks.insights[category];
+    return fallbacks.insights[category as keyof typeof fallbacks.insights];
   } else if (prompt.includes('recommend')) {
     let category = 'product';
     if (prompt.includes('onboarding')) category = 'onboarding';
     if (prompt.includes('engagement')) category = 'engagement';
     if (prompt.includes('support')) category = 'support';
     
-    return fallbacks.recommendations[category];
+    return fallbacks.recommendations[category as keyof typeof fallbacks.recommendations];
   }
   
   // Default fallback
@@ -725,7 +725,7 @@ const generateFallbackPersonas = (): void => {
     occasional: {
       namePrefix: ['Casual', 'Occasional', 'Infrequent'],
       description: 'This user is an occasional user of a SaaS product. They log in periodically for specific tasks.',
-      painPoints: ['Forgets how to use interface', 'Doesn't see regular value', 'Notifications are too frequent'],
+      painPoints: ['Forgets how to use interface', 'Doesn\'t see regular value', 'Notifications are too frequent'],
       goals: ['Complete specific tasks quickly', 'Learn essential features only', 'Minimize time investment']
     }
   };
@@ -953,7 +953,7 @@ const generateFallbackStories = (): void => {
       },
       {
         title: 'Simplified Workflow Guide',
-        description: 'As an at-risk user, I want simpler ways to accomplish my goals so that I don't feel overwhelmed by the product.',
+        description: 'As an at-risk user, I want simpler ways to accomplish my goals so that I don\'t feel overwhelmed by the product.',
         criteria: [
           'Guide should focus on essential steps only',
           'Visual cues should highlight primary actions',
@@ -973,7 +973,7 @@ const generateFallbackStories = (): void => {
       },
       {
         title: 'Feature Reminder Tooltips',
-        description: 'As an occasional user, I want contextual reminders about how features work so that I don't need to relearn the interface each time.',
+        description: 'As an occasional user, I want contextual reminders about how features work so that I don\'t need to relearn the interface each time.',
         criteria: [
           'Tooltips should appear for infrequently used features',
           'Tooltips should be dismissible',
@@ -1281,7 +1281,7 @@ const generateFallbackInsights = (): void => {
     product: [
       {
         title: 'Feature Discovery Analysis',
-        description: 'Feature discovery is a major issue. Many users aren't aware of key features that would solve their specific problems.',
+        description: 'Feature discovery is a major issue. Many users aren\'t aware of key features that would solve their specific problems.',
         recommendation: 'Add feature discovery tooltips based on user behavior patterns to highlight relevant functionality.',
         impact: 'high' as const
       },
