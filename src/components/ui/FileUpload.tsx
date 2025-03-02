@@ -21,11 +21,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('❌ No file selected');
+      return;
+    }
 
+    console.log(`📤 File selected: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
     const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
     
     if (!validTypes.includes(file.type)) {
+      console.error(`❌ Invalid file type: ${file.type}. Expected one of: ${validTypes.join(', ')}`);
       setState({
         ...state,
         error: 'Please upload a CSV or Excel file.',
@@ -43,6 +48,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
   };
 
   const handleUpload = async (file: File) => {
+    console.log(`🚀 Starting upload process for: ${file.name}`);
     setState({
       ...state,
       isUploading: true,
@@ -60,10 +66,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
           ...prev,
           progress,
         }));
+        console.log(`📊 Upload progress: ${progress}%`);
       }
     }, 150);
 
     try {
+      console.log('🔄 Processing file data...');
       // Process the file data
       const success = await processFileData(file);
       
@@ -71,6 +79,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       clearInterval(progressInterval);
       
       if (success) {
+        console.log('✅ File processed successfully');
         // Complete the progress animation
         setState({
           isUploading: true,
@@ -78,6 +87,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
           error: null,
           success: false,
         });
+        console.log('📊 Upload progress: 70% - Processing complete');
         
         // Simulate AI processing time
         setTimeout(() => {
@@ -87,6 +97,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
             error: null,
             success: false,
           });
+          console.log('📊 Upload progress: 85% - Finalizing insights');
           
           setTimeout(() => {
             setState({
@@ -95,6 +106,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
               error: null,
               success: true,
             });
+            console.log('📊 Upload progress: 100% - Complete');
             
             toast({
               title: 'Upload successful',
@@ -105,6 +117,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
           }, 800);
         }, 1000);
       } else {
+        console.error('❌ File processing failed');
         clearInterval(progressInterval);
         setState({
           isUploading: false,
@@ -120,6 +133,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
         });
       }
     } catch (error) {
+      console.error('❌ File processing error:', error);
       clearInterval(progressInterval);
       setState({
         isUploading: false,
@@ -133,8 +147,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
         description: 'An error occurred during processing. Please try again.',
         variant: 'destructive',
       });
-      
-      console.error('File processing error:', error);
     }
   };
 
@@ -148,11 +160,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
     e.stopPropagation();
     
     const file = e.dataTransfer.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('❌ No file dropped');
+      return;
+    }
     
+    console.log(`📥 File dropped: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
     const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
     
     if (!validTypes.includes(file.type)) {
+      console.error(`❌ Invalid file type: ${file.type}. Expected one of: ${validTypes.join(', ')}`);
       setState({
         ...state,
         error: 'Please upload a CSV or Excel file.',
@@ -170,6 +187,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
   };
   
   const triggerFileInput = () => {
+    console.log('🖱️ File input triggered');
     fileInputRef.current?.click();
   };
 
