@@ -1,4 +1,3 @@
-
 import { UserData, UserSegment, Persona, UserStory, ChurnMetric, Insight } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import Papa from 'papaparse';
@@ -135,6 +134,42 @@ const transformRawData = (rawData: any[]): UserData[] => {
   });
 };
 
+// Helper function to safely extract text from text generation output
+const extractGeneratedText = (result: any): string => {
+  // Check various properties that might contain the generated text
+  if (result && typeof result === 'object') {
+    // For TextGenerationSingle format
+    if (result.generated_text) {
+      return result.generated_text;
+    }
+    // For array format
+    if (Array.isArray(result) && result.length > 0) {
+      const firstResult = result[0];
+      if (typeof firstResult === 'string') {
+        return firstResult;
+      }
+      if (firstResult && firstResult.generated_text) {
+        return firstResult.generated_text;
+      }
+      if (firstResult && firstResult.text) {
+        return firstResult.text;
+      }
+    }
+    // For object format with text property
+    if (result.text) {
+      return result.text;
+    }
+    // For object format with sequences
+    if (result.sequences && result.sequences.length > 0) {
+      return result.sequences[0].text || '';
+    }
+  }
+  
+  // If we can't find generated text, return empty string
+  console.warn('Could not extract generated text from result:', result);
+  return '';
+};
+
 // Generate personas based on processed user data
 const generatePersonas = async (): Promise<void> => {
   // Group users by segment
@@ -177,7 +212,8 @@ const generatePersonas = async (): Promise<void> => {
     // Generate description using Hugging Face
     const promptText = `This user is a ${segment === 'power' ? 'highly engaged' : segment === 'atrisk' ? 'at risk of churning' : 'occasional'} user of a SaaS product. They`;
     const descriptionResult = await textGenerator(promptText, { max_length: 100, num_return_sequences: 1 });
-    const description = (descriptionResult[0].generated_text || promptText)
+    const generatedDescription = extractGeneratedText(descriptionResult);
+    const description = (generatedDescription || promptText)
       .replace(promptText, '')
       .replace(/\.$/, '')
       .trim();
@@ -185,7 +221,7 @@ const generatePersonas = async (): Promise<void> => {
     // Generate pain points
     const painPointsPrompt = `Pain points for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
     const painPointsResult = await textGenerator(painPointsPrompt, { max_length: 70, num_return_sequences: 1 });
-    const painPointsText = painPointsResult[0].generated_text || '';
+    const painPointsText = extractGeneratedText(painPointsResult) || '';
     
     // Extract pain points from generated text
     const painPoints = painPointsText
@@ -198,7 +234,7 @@ const generatePersonas = async (): Promise<void> => {
     // Same for goals
     const goalsPrompt = `Goals for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
     const goalsResult = await textGenerator(goalsPrompt, { max_length: 70, num_return_sequences: 1 });
-    const goalsText = goalsResult[0].generated_text || '';
+    const goalsText = extractGeneratedText(goalsResult) || '';
     
     const goals = goalsText
       .replace(goalsPrompt, '')
@@ -243,13 +279,13 @@ const generateUserStories = async (): Promise<void> => {
     // Generate story title
     const titlePrompt = `User story for ${storyType}:`;
     const titleResult = await textGenerator(titlePrompt, { max_length: 30, num_return_sequences: 1 });
-    const titleText = titleResult[0].generated_text || '';
+    const titleText = extractGeneratedText(titleResult) || '';
     const title = titleText.replace(titlePrompt, '').trim() || storyType;
     
     // Generate story description using "As a user, I want to... so that..." format
     const descriptionPrompt = `As ${persona.name}, I want`;
     const descriptionResult = await textGenerator(descriptionPrompt, { max_length: 100, num_return_sequences: 1 });
-    const descriptionText = descriptionResult[0].generated_text || '';
+    const descriptionText = extractGeneratedText(descriptionResult) || '';
     const description = descriptionText.trim() || `${descriptionPrompt} to see value in the product quickly`;
     
     // Generate acceptance criteria
@@ -257,7 +293,7 @@ const generateUserStories = async (): Promise<void> => {
     for (let i = 0; i < 3; i++) {
       const criteriaPrompt = `Acceptance criteria for ${title}:`;
       const criteriaResult = await textGenerator(criteriaPrompt, { max_length: 50, num_return_sequences: 1 });
-      const criteriaText = criteriaResult[0].generated_text || '';
+      const criteriaText = extractGeneratedText(criteriaResult) || '';
       const criterion = criteriaText.replace(criteriaPrompt, '').trim();
       if (criterion) {
         criteria.push(criterion);
@@ -367,18 +403,18 @@ const generateInsights = async (): Promise<void> => {
     // Generate insight title
     const titlePrompt = `Insight about ${category}:`;
     const titleResult = await textGenerator(titlePrompt, { max_length: 50, num_return_sequences: 1 });
-    const title = titleResult[0].generated_text.replace(titlePrompt, '').trim() || `Improve ${category}`;
+    const title = extractGeneratedText(titleResult).replace(titlePrompt, '').trim() || `Improve ${category}`;
     
     // Generate insight description
     const descriptionPrompt = `Description of insight about ${category}:`;
     const descriptionResult = await textGenerator(descriptionPrompt, { max_length: 80, num_return_sequences: 1 });
-    const description = descriptionResult[0].generated_text.replace(descriptionPrompt, '').trim() || 
+    const description = extractGeneratedText(descriptionResult).replace(descriptionPrompt, '').trim() || 
       `Users who interact with ${category} features show different behavior patterns.`;
     
     // Generate recommendation
     const recommendationPrompt = `Recommendation for ${title}:`;
     const recommendationResult = await textGenerator(recommendationPrompt, { max_length: 80, num_return_sequences: 1 });
-    const recommendation = recommendationResult[0].generated_text.replace(recommendationPrompt, '').trim() || 
+    const recommendation = extractGeneratedText(recommendationResult).replace(recommendationPrompt, '').trim() || 
       `Consider improving ${category} experience to reduce churn.`;
     
     // Determine impact level - weight toward higher impact for more important categories
