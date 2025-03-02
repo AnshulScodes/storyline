@@ -2,7 +2,7 @@
 import React from 'react';
 import { Persona } from '@/types';
 import { motion } from 'framer-motion';
-import { ChevronRight, AlertTriangle, Zap, Clock } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Zap, Clock, User, Mail } from 'lucide-react';
 
 interface PersonaCardProps {
   persona: Persona;
@@ -52,6 +52,13 @@ const PersonaCard: React.FC<PersonaCardProps> = ({ persona, onClick }) => {
   const segmentClass = getSegmentColor(persona.segment);
   const segmentIcon = getSegmentIcon(persona.segment);
   const segmentLabel = getSegmentLabel(persona.segment);
+  
+  // Display example user details for at-risk personas
+  const showUserDetails = persona.segment === 'atrisk';
+  
+  // Generate sample user ID and email based on persona name
+  const sampleUserId = `user_${persona.name.toLowerCase().replace(' ', '_')}${Math.floor(Math.random() * 1000)}`;
+  const sampleEmail = `${persona.name.toLowerCase().replace(' ', '.')}@example.com`;
 
   return (
     <motion.div
@@ -83,6 +90,22 @@ const PersonaCard: React.FC<PersonaCardProps> = ({ persona, onClick }) => {
             {Math.round(persona.churnRisk * 100)}% Risk
           </div>
         </div>
+        
+        {showUserDetails && (
+          <div className="mb-4 bg-red-50 p-3 rounded-md border border-red-200">
+            <h4 className="text-xs font-semibold text-red-700 mb-2">Example At-Risk User</h4>
+            <div className="flex items-center gap-2 text-xs text-red-700 mb-1">
+              <User className="h-3 w-3" />
+              <span className="font-medium">ID:</span> 
+              <span className="font-mono">{sampleUserId}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-red-700">
+              <Mail className="h-3 w-3" />
+              <span className="font-medium">Email:</span> 
+              <span>{sampleEmail}</span>
+            </div>
+          </div>
+        )}
         
         <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
           {persona.description}
