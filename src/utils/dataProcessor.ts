@@ -1,3 +1,4 @@
+
 import { UserData, UserSegment, Persona, UserStory, ChurnMetric, Insight } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import Papa from 'papaparse';
@@ -22,6 +23,9 @@ export const processFileData = async (file: File): Promise<boolean> => {
 
     // Transform raw data into UserData objects
     processedUserData = transformRawData(fileData);
+    
+    // Sort users by churn risk (highest to lowest)
+    processedUserData.sort((a, b) => b.churnRisk - a.churnRisk);
     
     // Generate personas based on processed data
     await generatePersonas();
@@ -80,7 +84,16 @@ const readFileData = async (file: File): Promise<any[]> => {
   });
 };
 
-// Transform raw data into UserData objects
+/**
+ * Transform raw data into structured UserData objects
+ * 
+ * This function:
+ * 1. Maps CSV/Excel column names to expected field names
+ * 2. Creates UserData objects with proper typing
+ * 3. Calculates churn risk based on activity scores
+ * 4. Assigns user segments based on churn risk thresholds
+ * 5. Returns sorted array of UserData objects
+ */
 const transformRawData = (rawData: any[]): UserData[] => {
   // Map expected field names (flexible mapping to accommodate different CSV formats)
   const fieldMap = {
@@ -103,17 +116,39 @@ const transformRawData = (rawData: any[]): UserData[] => {
     }
   }
 
-  // Transform the data
-  return rawData.map((row, index) => {
-    // Generate random values for missing fields
+  // Initialize result array
+  const userData: UserData[] = [];
+
+  // Process each row in the raw data
+  rawData.forEach((row, index) => {
+    // Generate or extract activity score
     const activityScoreValue = actualFieldMap.activityScore && !isNaN(Number(row[actualFieldMap.activityScore])) 
       ? Number(row[actualFieldMap.activityScore]) 
       : Math.random() * 10;
-      
-    // Calculate churn risk based on activity score
-    const churnRisk = 1 - (activityScoreValue / 10);
     
-    // Determine user segment based on churn risk
+    // Advanced churn risk calculation with weighted factors
+    let churnRisk = 0;
+    
+    // Base churn risk from activity score (50% weight)
+    const activityBasedRisk = 1 - (activityScoreValue / 10);
+    churnRisk += activityBasedRisk * 0.5;
+    
+    // Last login recency factor (30% weight)
+    const lastLoginDate = new Date(row[actualFieldMap.lastLogin] || Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000);
+    const daysSinceLastLogin = (Date.now() - lastLoginDate.getTime()) / (1000 * 60 * 60 * 24);
+    const loginRecencyRisk = Math.min(daysSinceLastLogin / 30, 1); // Normalize to 0-1
+    churnRisk += loginRecencyRisk * 0.3;
+    
+    // Account age factor (20% weight) - newer accounts have higher churn risk
+    const registeredDate = new Date(row[actualFieldMap.registeredDate] || Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000);
+    const accountAgeInDays = (Date.now() - registeredDate.getTime()) / (1000 * 60 * 60 * 24);
+    const accountAgeRisk = Math.max(1 - (accountAgeInDays / 180), 0); // Normalize to 0-1
+    churnRisk += accountAgeRisk * 0.2;
+    
+    // Ensure churn risk is within 0-1 range
+    churnRisk = Math.max(0, Math.min(1, churnRisk));
+    
+    // Determine user segment based on churn risk thresholds
     let userSegment: UserSegment = 'occasional';
     if (churnRisk > 0.7) {
       userSegment = 'atrisk';
@@ -121,48 +156,61 @@ const transformRawData = (rawData: any[]): UserData[] => {
       userSegment = 'power';
     }
     
-    return {
+    // Create user data object
+    userData.push({
       id: row[actualFieldMap.id] || uuidv4(),
       name: row[actualFieldMap.name] || `User ${index + 1}`,
       email: row[actualFieldMap.email] || `user${index + 1}@example.com`,
-      lastLogin: row[actualFieldMap.lastLogin] || new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      registeredDate: row[actualFieldMap.registeredDate] || new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString(),
+      lastLogin: row[actualFieldMap.lastLogin] || lastLoginDate.toISOString(),
+      registeredDate: row[actualFieldMap.registeredDate] || registeredDate.toISOString(),
       userSegment,
       churnRisk,
       activityScore: activityScoreValue
-    };
+    });
   });
+
+  // Sort users by churn risk (descending)
+  return userData.sort((a, b) => b.churnRisk - a.churnRisk);
 };
 
-// Helper function to safely extract text from text generation output
+/**
+ * Safely extracts generated text from Hugging Face model output
+ * 
+ * Handles different output formats from the Hugging Face transformers
+ * and ensures we gracefully handle any inconsistencies
+ */
 const extractGeneratedText = (result: any): string => {
-  // Check various properties that might contain the generated text
-  if (result && typeof result === 'object') {
-    // For TextGenerationSingle format
-    if (result.generated_text) {
-      return result.generated_text;
-    }
-    // For array format
-    if (Array.isArray(result) && result.length > 0) {
-      const firstResult = result[0];
-      if (typeof firstResult === 'string') {
-        return firstResult;
+  try {
+    // Check various properties that might contain the generated text
+    if (result && typeof result === 'object') {
+      // For TextGenerationSingle format
+      if (typeof result.generated_text === 'string') {
+        return result.generated_text;
       }
-      if (firstResult && firstResult.generated_text) {
-        return firstResult.generated_text;
+      // For array format
+      if (Array.isArray(result) && result.length > 0) {
+        const firstResult = result[0];
+        if (typeof firstResult === 'string') {
+          return firstResult;
+        }
+        if (firstResult && typeof firstResult.generated_text === 'string') {
+          return firstResult.generated_text;
+        }
+        if (firstResult && typeof firstResult.text === 'string') {
+          return firstResult.text;
+        }
       }
-      if (firstResult && firstResult.text) {
-        return firstResult.text;
+      // For object format with text property
+      if (typeof result.text === 'string') {
+        return result.text;
+      }
+      // For object format with sequences
+      if (result.sequences && result.sequences.length > 0) {
+        return typeof result.sequences[0].text === 'string' ? result.sequences[0].text : '';
       }
     }
-    // For object format with text property
-    if (result.text) {
-      return result.text;
-    }
-    // For object format with sequences
-    if (result.sequences && result.sequences.length > 0) {
-      return result.sequences[0].text || '';
-    }
+  } catch (error) {
+    console.error('Error extracting generated text:', error);
   }
   
   // If we can't find generated text, return empty string
@@ -170,7 +218,14 @@ const extractGeneratedText = (result: any): string => {
   return '';
 };
 
-// Generate personas based on processed user data
+/**
+ * Generate user personas based on processed data
+ * 
+ * Creates realistic user personas for each segment using:
+ * 1. Actual user data as the foundation
+ * 2. AI-generated descriptions, pain points and goals
+ * 3. Segment-specific naming conventions and traits
+ */
 const generatePersonas = async (): Promise<void> => {
   // Group users by segment
   const usersBySegment: Record<UserSegment, UserData[]> = {
@@ -191,7 +246,7 @@ const generatePersonas = async (): Promise<void> => {
     // Calculate average churn risk for the segment
     const avgChurnRisk = usersInSegment.reduce((sum, user) => sum + user.churnRisk, 0) / usersInSegment.length;
     
-    // Generate persona name
+    // Generate persona name based on segment
     const segmentNames = {
       power: ['Power', 'Pro', 'Expert', 'Advanced', 'Champion'],
       atrisk: ['Risk', 'Churn', 'Leaving', 'Fading', 'Wavering'],
@@ -211,7 +266,14 @@ const generatePersonas = async (): Promise<void> => {
     
     // Generate description using Hugging Face
     const promptText = `This user is a ${segment === 'power' ? 'highly engaged' : segment === 'atrisk' ? 'at risk of churning' : 'occasional'} user of a SaaS product. They`;
-    const descriptionResult = await textGenerator(promptText, { max_length: 100, num_return_sequences: 1 });
+    let descriptionResult;
+    try {
+      descriptionResult = await textGenerator(promptText, { max_length: 100, num_return_sequences: 1 });
+    } catch (error) {
+      console.error('Error generating description:', error);
+      descriptionResult = { text: 'use the product regularly but have specific needs.' };
+    }
+    
     const generatedDescription = extractGeneratedText(descriptionResult);
     const description = (generatedDescription || promptText)
       .replace(promptText, '')
@@ -220,7 +282,14 @@ const generatePersonas = async (): Promise<void> => {
     
     // Generate pain points
     const painPointsPrompt = `Pain points for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
-    const painPointsResult = await textGenerator(painPointsPrompt, { max_length: 70, num_return_sequences: 1 });
+    let painPointsResult;
+    try {
+      painPointsResult = await textGenerator(painPointsPrompt, { max_length: 70, num_return_sequences: 1 });
+    } catch (error) {
+      console.error('Error generating pain points:', error);
+      painPointsResult = { text: 'Limited features, Confusing interface, Slow performance' };
+    }
+    
     const painPointsText = extractGeneratedText(painPointsResult) || '';
     
     // Extract pain points from generated text
@@ -231,9 +300,16 @@ const generatePersonas = async (): Promise<void> => {
       .filter(point => point.length > 0 && point.length < 30)
       .slice(0, 3);
     
-    // Same for goals
+    // Generate goals
     const goalsPrompt = `Goals for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
-    const goalsResult = await textGenerator(goalsPrompt, { max_length: 70, num_return_sequences: 1 });
+    let goalsResult;
+    try {
+      goalsResult = await textGenerator(goalsPrompt, { max_length: 70, num_return_sequences: 1 });
+    } catch (error) {
+      console.error('Error generating goals:', error);
+      goalsResult = { text: 'Faster workflows, Better integration, More advanced features' };
+    }
+    
     const goalsText = extractGeneratedText(goalsResult) || '';
     
     const goals = goalsText
@@ -458,3 +534,4 @@ export const getGeneratedInsights = (): Insight[] => {
 export const hasGeneratedData = (): boolean => {
   return processedUserData.length > 0;
 };
+
