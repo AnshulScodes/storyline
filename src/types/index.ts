@@ -1,4 +1,3 @@
-
 export interface UserData {
   id: string;
   name: string;
@@ -12,6 +11,14 @@ export interface UserData {
 
 export type UserSegment = 'power' | 'atrisk' | 'occasional';
 
+export interface PersonaUser {
+  id: string;
+  name: string;
+  email: string;
+  lastLogin: string;
+  churnRisk: number;
+}
+
 export interface Persona {
   id: string;
   name: string;
@@ -21,6 +28,7 @@ export interface Persona {
   goals: string[];
   churnRisk: number;
   image?: string;
+  users?: PersonaUser[];
 }
 
 export interface UserStory {

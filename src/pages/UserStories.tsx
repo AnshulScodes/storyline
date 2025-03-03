@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import PersonaCard from '@/components/ui/PersonaCard';
@@ -6,11 +5,13 @@ import StoryDetail from '@/components/ui/StoryDetail';
 import { Persona, UserStory } from '@/types';
 import { motion } from 'framer-motion';
 import { Search, Filter, ChevronDown } from 'lucide-react';
+import ExportPDF from '@/components/ui/ExportPDF';
 
 const UserStories = () => {
   const [selectedStory, setSelectedStory] = useState<UserStory | null>(null);
   const [activeSegment, setActiveSegment] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSegmentFilter, setShowSegmentFilter] = useState(false);
   
   // Mock data for demonstration purposes
   const personas: Persona[] = [
@@ -181,44 +182,67 @@ const UserStories = () => {
       <Navbar />
       
       <main className="container mx-auto px-4 pt-24 pb-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">User Personas & Stories</h1>
-          <p className="text-muted-foreground">AI-generated personas based on your user data</p>
-        </div>
-        
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div className="flex flex-wrap gap-2">
-            {segments.map(segment => (
-              <button
-                key={segment.id}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeSegment === segment.id
-                    ? 'bg-primary text-white'
-                    : 'bg-secondary text-foreground hover:bg-secondary/80'
-                }`}
-                onClick={() => handleSegmentFilter(segment.id)}
-              >
-                {segment.label}
-              </button>
-            ))}
-            <button 
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-secondary text-foreground hover:bg-secondary/80 transition-colors flex items-center gap-1"
-            >
-              <Filter className="h-4 w-4" />
-              More Filters
-              <ChevronDown className="h-4 w-4" />
-            </button>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">User Stories</h1>
+            <p className="text-muted-foreground">Explore user personas and their associated stories</p>
           </div>
           
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search personas..."
-              className="pl-10 pr-4 py-2 rounded-lg border border-input bg-background w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-ring transition-shadow duration-200"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex items-center gap-2 mt-4 md:mt-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <input
+                type="text"
+                placeholder="Search personas..."
+                className="pl-9 pr-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <div className="relative">
+              <button
+                className="flex items-center gap-1 px-3 py-2 rounded-md border border-input bg-background text-sm hover:bg-accent"
+                onClick={() => setShowSegmentFilter(!showSegmentFilter)}
+              >
+                <Filter className="h-4 w-4" />
+                <span>Filter</span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              
+              {showSegmentFilter && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-popover border border-border z-10">
+                  <div className="py-1">
+                    <button
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${activeSegment === null ? 'bg-accent/50' : ''}`}
+                      onClick={() => setActiveSegment(null)}
+                    >
+                      All Segments
+                    </button>
+                    <button
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${activeSegment === 'power' ? 'bg-accent/50' : ''}`}
+                      onClick={() => setActiveSegment('power')}
+                    >
+                      Power Users
+                    </button>
+                    <button
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${activeSegment === 'atrisk' ? 'bg-accent/50' : ''}`}
+                      onClick={() => setActiveSegment('atrisk')}
+                    >
+                      At-Risk Users
+                    </button>
+                    <button
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${activeSegment === 'occasional' ? 'bg-accent/50' : ''}`}
+                      onClick={() => setActiveSegment('occasional')}
+                    >
+                      Occasional Users
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <ExportPDF />
           </div>
         </div>
         

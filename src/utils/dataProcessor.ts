@@ -1,5 +1,4 @@
-
-import { UserData, UserSegment, Persona, UserStory, ChurnMetric, Insight } from '@/types';
+import { UserData, UserSegment, Persona, UserStory, ChurnMetric, Insight, PersonaUser } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -490,20 +489,17 @@ const generateMockText = (prompt: string, topic: string): string => {
 };
 
 /**
- * Generate user personas based on the processed data
+ * Generate user personas based on segmentation
  * 
- * This function:
- * 1. Groups users by segment (power, atrisk, occasional)
- * 2. Uses AI text generation to create realistic descriptions, pain points, and goals
- * 3. Creates persona objects for each segment with representative characteristics
+ * Creates detailed personas for each user segment with:
+ * 1. Persona name and description
+ * 2. Segment classification (power, atrisk, occasional)
+ * 3. Pain points and goals specific to segment
+ * 4. Churn risk calculation based on segment averages
+ * 5. Actual users assigned to each persona
  */
 const generatePersonas = async (): Promise<void> => {
-  console.log('🧩 Starting persona generation...');
-  
-  if (!processedUserData.length) {
-    console.warn('⚠️ No user data available for persona generation');
-    return;
-  }
+  console.log('👤 Starting persona generation...');
   
   // Group users by segment
   const usersBySegment: Record<UserSegment, UserData[]> = {
@@ -512,13 +508,29 @@ const generatePersonas = async (): Promise<void> => {
     occasional: processedUserData.filter(user => user.userSegment === 'occasional')
   };
   
-  console.log('📊 User segment distribution:', {
-    power: usersBySegment.power.length,
-    atrisk: usersBySegment.atrisk.length,
-    occasional: usersBySegment.occasional.length
-  });
+  // Calculate average churn risk for each segment
+  const avgChurnRisk: Record<UserSegment, number> = {
+    power: usersBySegment.power.length > 0 
+      ? usersBySegment.power.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.power.length 
+      : 0.15,
+    atrisk: usersBySegment.atrisk.length > 0 
+      ? usersBySegment.atrisk.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.atrisk.length 
+      : 0.85,
+    occasional: usersBySegment.occasional.length > 0 
+      ? usersBySegment.occasional.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.occasional.length 
+      : 0.45
+  };
   
-  // Try to initialize the text generation pipeline with fallback options
+  console.log('📊 Average churn risk by segment:', avgChurnRisk);
+  
+  // Sort users by churn risk (highest first) to select top users for each persona
+  const sortedUsersBySegment: Record<UserSegment, UserData[]> = {
+    power: [...usersBySegment.power].sort((a, b) => b.churnRisk - a.churnRisk),
+    atrisk: [...usersBySegment.atrisk].sort((a, b) => b.churnRisk - a.churnRisk),
+    occasional: [...usersBySegment.occasional].sort((a, b) => b.churnRisk - a.churnRisk)
+  };
+  
+  // Try to initialize the text generation pipeline
   let textGenerator;
   try {
     console.log('🤖 Initializing text generation model...');
@@ -526,178 +538,184 @@ const generatePersonas = async (): Promise<void> => {
     console.log('✅ Text generation model initialized successfully');
   } catch (error) {
     console.error('❌ Failed to initialize text generation model:', error);
-    // We'll handle this by using fallback generation methods
-    throw new Error('Failed to initialize text generation model');
+    console.log('🔄 Falling back to template-based persona generation');
+    generateFallbackPersonas();
+    return;
   }
   
   const personas: Persona[] = [];
   
-  for (const segment of Object.keys(usersBySegment) as UserSegment[]) {
-    console.log(`🧩 Generating persona for ${segment} segment...`);
+  // Generate Power User Persona
+  if (usersBySegment.power.length > 0) {
+    console.log(`👤 Generating persona for power users (${usersBySegment.power.length} users)`);
     
-    const usersInSegment = usersBySegment[segment];
-    if (usersInSegment.length === 0) {
-      console.log(`⚠️ No users in ${segment} segment, skipping persona generation`);
-      continue;
-    }
+    // Map users to PersonaUser format
+    const powerUsers = sortedUsersBySegment.power.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    }));
     
-    // Calculate average churn risk for the segment
-    const avgChurnRisk = usersInSegment.reduce((sum, user) => sum + user.churnRisk, 0) / usersInSegment.length;
-    console.log(`📊 Average churn risk for ${segment} segment: ${avgChurnRisk.toFixed(2)}`);
-    
-    // Generate persona name based on segment
-    const segmentNames = {
-      power: ['Power', 'Pro', 'Expert', 'Advanced', 'Champion'],
-      atrisk: ['Risk', 'Churn', 'Leaving', 'Fading', 'Wavering'],
-      occasional: ['Casual', 'Rare', 'Infrequent', 'Part-time', 'Occasional']
-    };
-    
-    const randomNames = [
-      'Alex', 'Bailey', 'Casey', 'Dana', 'Ellis', 
-      'Francis', 'Glenn', 'Harper', 'Ivy', 'Jordan', 
-      'Kelly', 'Leslie', 'Morgan', 'Nico', 'Ollie', 
-      'Parker', 'Quinn', 'Riley', 'Sage', 'Taylor'
-    ];
-    
-    const prefix = segmentNames[segment][Math.floor(Math.random() * segmentNames[segment].length)];
-    const name = randomNames[Math.floor(Math.random() * randomNames.length)];
-    const personaName = `${prefix} ${name}`;
-    console.log(`👤 Generated persona name: ${personaName}`);
-    
-    // Generate description using Hugging Face or fallback
-    const promptText = `This user is a ${segment === 'power' ? 'highly engaged' : segment === 'atrisk' ? 'at risk of churning' : 'occasional'} user of a SaaS product. They`;
-    let description;
-    
-    try {
-      console.log(`🤖 Generating description for ${segment} persona...`);
-      console.log(`🤖 Prompt: "${promptText}"`);
-      
-      const descriptionResult = await textGenerator(promptText, { 
-        max_length: 100, 
-        num_return_sequences: 1 
-      });
-      
-      console.log('🤖 Raw description result:', JSON.stringify(descriptionResult).substring(0, 200) + '...');
-      
-      const generatedDescription = extractGeneratedText(descriptionResult);
-      console.log(`🤖 Extracted description: "${generatedDescription}"`);
-      
-      description = (generatedDescription || promptText)
-        .replace(promptText, '')
-        .replace(/\.$/, '')
-        .trim();
-        
-      if (!description) {
-        throw new Error('Empty generated description');
-      }
-      
-      console.log(`✅ Generated description: "${description}"`);
-    } catch (error) {
-      console.error('❌ Error generating description:', error);
-      description = generateMockText(promptText, segment);
-      console.log(`🔄 Using fallback description: "${description}"`);
-    }
-    
-    // Generate pain points
-    const painPointsPrompt = `Pain points for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
-    let painPoints: string[] = [];
-    
-    try {
-      console.log(`🤖 Generating pain points for ${segment} persona...`);
-      console.log(`🤖 Prompt: "${painPointsPrompt}"`);
-      
-      const painPointsResult = await textGenerator(painPointsPrompt, { 
-        max_length: 70, 
-        num_return_sequences: 1 
-      });
-      
-      console.log('🤖 Raw pain points result:', JSON.stringify(painPointsResult).substring(0, 200) + '...');
-      
-      const painPointsText = extractGeneratedText(painPointsResult) || '';
-      console.log(`🤖 Extracted pain points text: "${painPointsText}"`);
-      
-      // Extract pain points from generated text
-      painPoints = painPointsText
-        .replace(painPointsPrompt, '')
-        .split(/[,.;]/)
-        .map(point => point.trim())
-        .filter(point => point.length > 0 && point.length < 30)
-        .slice(0, 3);
-        
-      if (painPoints.length === 0) {
-        throw new Error('No pain points extracted');
-      }
-      
-      console.log(`✅ Generated pain points: ${painPoints.join(', ')}`);
-    } catch (error) {
-      console.error('❌ Error generating pain points:', error);
-      const fallbackText = generateMockText(painPointsPrompt, segment);
-      painPoints = fallbackText.split(', ');
-      console.log(`🔄 Using fallback pain points: ${painPoints.join(', ')}`);
-    }
-    
-    // Generate goals
-    const goalsPrompt = `Goals for ${segment === 'power' ? 'power users' : segment === 'atrisk' ? 'users about to churn' : 'occasional users'} include:`;
-    let goals: string[] = [];
-    
-    try {
-      console.log(`🤖 Generating goals for ${segment} persona...`);
-      console.log(`🤖 Prompt: "${goalsPrompt}"`);
-      
-      const goalsResult = await textGenerator(goalsPrompt, { 
-        max_length: 70, 
-        num_return_sequences: 1 
-      });
-      
-      console.log('🤖 Raw goals result:', JSON.stringify(goalsResult).substring(0, 200) + '...');
-      
-      const goalsText = extractGeneratedText(goalsResult) || '';
-      console.log(`🤖 Extracted goals text: "${goalsText}"`);
-      
-      goals = goalsText
-        .replace(goalsPrompt, '')
-        .split(/[,.;]/)
-        .map(goal => goal.trim())
-        .filter(goal => goal.length > 0 && goal.length < 30)
-        .slice(0, 3);
-        
-      if (goals.length === 0) {
-        throw new Error('No goals extracted');
-      }
-      
-      console.log(`✅ Generated goals: ${goals.join(', ')}`);
-    } catch (error) {
-      console.error('❌ Error generating goals:', error);
-      const fallbackText = generateMockText(goalsPrompt, segment);
-      goals = fallbackText.split(', ');
-      console.log(`🔄 Using fallback goals: ${goals.join(', ')}`);
-    }
-    
+    // Create Power User Persona
     personas.push({
       id: uuidv4(),
-      name: personaName,
-      segment,
-      description: `${promptText} ${description}.`,
-      painPoints: painPoints.length > 0 ? painPoints : ['N/A'],
-      goals: goals.length > 0 ? goals : ['N/A'],
-      churnRisk: avgChurnRisk
+      name: 'Power Partner Patty',
+      segment: 'power',
+      description: 'Daily user who relies on your product for critical work tasks. Engaged with most features and has a high feature adoption rate.',
+      painPoints: [
+        'Complex workflows that require too many steps',
+        'Performance issues during peak usage times',
+        'Limited advanced customization options'
+      ],
+      goals: [
+        'Save time on repetitive tasks',
+        'Gain deeper insights from data',
+        'Integrate with other tools in their workflow'
+      ],
+      churnRisk: avgChurnRisk.power,
+      users: powerUsers
     });
     
-    console.log(`✅ Created persona: ${personaName} (${segment})`);
+    // If there are enough power users, create a secondary persona for enterprise users
+    if (usersBySegment.power.length >= 10) {
+      console.log('👤 Creating secondary power user persona (Corporate Claire)');
+      
+      // Take the second half of power users for this persona
+      const corporateUsers = powerUsers.slice(Math.floor(powerUsers.length / 2));
+      
+      personas.push({
+        id: uuidv4(),
+        name: 'Corporate Claire',
+        segment: 'power',
+        description: 'Enterprise user who manages teams and needs robust administrative features. Values reliability and security above all.',
+        painPoints: [
+          'Insufficient team management capabilities',
+          'Limited permission controls',
+          'Lack of enterprise-grade security features'
+        ],
+        goals: [
+          'Efficiently manage large teams',
+          'Ensure data security and compliance',
+          'Generate comprehensive reports for stakeholders'
+        ],
+        churnRisk: avgChurnRisk.power * 0.9, // Slightly lower churn risk for enterprise users
+        users: corporateUsers
+      });
+    }
+  }
+  
+  // Generate At-Risk User Persona
+  if (usersBySegment.atrisk.length > 0) {
+    console.log(`👤 Generating persona for at-risk users (${usersBySegment.atrisk.length} users)`);
+    
+    // Map users to PersonaUser format
+    const atRiskUsers = sortedUsersBySegment.atrisk.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    }));
+    
+    // Create At-Risk User Persona
+    personas.push({
+      id: uuidv4(),
+      name: 'At-Risk Andy',
+      segment: 'atrisk',
+      description: 'Previously active user whose engagement has declined over the past month. Hasn\'t logged in for 14 days.',
+      painPoints: [
+        'Confusing interface that requires too much learning',
+        'Missing features that competitors offer',
+        'Technical issues that disrupt workflow'
+      ],
+      goals: [
+        'Simplify daily tasks',
+        'Get better support when issues arise',
+        'Find more value in the product to justify cost'
+      ],
+      churnRisk: avgChurnRisk.atrisk,
+      users: atRiskUsers
+    });
+    
+    // If there are enough at-risk users, create a secondary persona
+    if (usersBySegment.atrisk.length >= 10) {
+      console.log('👤 Creating secondary at-risk user persona (Skeptical Sam)');
+      
+      // Take the second half of at-risk users for this persona
+      const skepticalUsers = atRiskUsers.slice(Math.floor(atRiskUsers.length / 2));
+      
+      personas.push({
+        id: uuidv4(),
+        name: 'Skeptical Sam',
+        segment: 'atrisk',
+        description: 'New user who signed up recently but hasn\'t fully engaged with the product. Still evaluating if it meets their needs.',
+        painPoints: [
+          'Steep learning curve',
+          'Unclear value proposition',
+          'Difficulty finding relevant features'
+        ],
+        goals: [
+          'Quickly understand product benefits',
+          'Easily implement the product into existing workflow',
+          'See immediate results from using the product'
+        ],
+        churnRisk: avgChurnRisk.atrisk * 1.1, // Slightly higher churn risk for skeptical users
+        users: skepticalUsers
+      });
+    }
+  }
+  
+  // Generate Occasional User Persona
+  if (usersBySegment.occasional.length > 0) {
+    console.log(`👤 Generating persona for occasional users (${usersBySegment.occasional.length} users)`);
+    
+    // Map users to PersonaUser format
+    const occasionalUsers = sortedUsersBySegment.occasional.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    }));
+    
+    // Create Occasional User Persona
+    personas.push({
+      id: uuidv4(),
+      name: 'Occasional Olivia',
+      segment: 'occasional',
+      description: 'Logs in infrequently, typically once every few weeks. Only uses a small subset of features.',
+      painPoints: [
+        'Forgetting how to use features between sessions',
+        'Difficulty seeing value in the product',
+        'Not receiving updates about new features'
+      ],
+      goals: [
+        'Accomplish specific tasks quickly',
+        'Easily pick up where they left off',
+        'Stay updated on relevant new features'
+      ],
+      churnRisk: avgChurnRisk.occasional,
+      users: occasionalUsers
+    });
   }
   
   generatedPersonas = personas;
-  console.log(`✅ Generated ${personas.length} personas successfully`);
+  console.log(`✅ Generated ${personas.length} personas with real user data`);
 };
 
 /**
  * Generate fallback personas when AI generation fails
  * 
- * Creates basic personas for each user segment using
- * predefined templates for descriptions, pain points and goals.
+ * Creates template-based personas for each user segment with:
+ * 1. Basic persona details (name, description, segment)
+ * 2. Standard pain points and goals for each segment
+ * 3. Average churn risk calculation
+ * 4. All actual users assigned to each persona
  */
 const generateFallbackPersonas = (): void => {
-  console.log('🔄 Generating fallback personas...');
+  console.log('🔄 Using fallback method to generate personas...');
   
   // Group users by segment
   const usersBySegment: Record<UserSegment, UserData[]> = {
@@ -706,63 +724,87 @@ const generateFallbackPersonas = (): void => {
     occasional: processedUserData.filter(user => user.userSegment === 'occasional')
   };
   
-  const personas: Persona[] = [];
-  
-  // Predefined persona templates by segment
-  const personaTemplates = {
-    power: {
-      namePrefix: ['Power', 'Pro', 'Expert'],
-      description: 'This user is a highly engaged user of a SaaS product. They use the product daily and leverage advanced features.',
-      painPoints: ['Limited advanced features', 'Occasional performance issues', 'Needs better integration options'],
-      goals: ['Improve workflow efficiency', 'Access advanced analytics', 'Customize experience further']
-    },
-    atrisk: {
-      namePrefix: ['At-Risk', 'Churning', 'Leaving'],
-      description: 'This user is at risk of churning from a SaaS product. They have decreased their usage recently and may not renew.',
-      painPoints: ['Unclear value proposition', 'Difficult onboarding', 'Too expensive for current usage'],
-      goals: ['Find immediate value', 'Resolve technical issues', 'Simplify complex processes']
-    },
-    occasional: {
-      namePrefix: ['Casual', 'Occasional', 'Infrequent'],
-      description: 'This user is an occasional user of a SaaS product. They log in periodically for specific tasks.',
-      painPoints: ['Forgets how to use interface', 'Doesn\'t see regular value', 'Notifications are too frequent'],
-      goals: ['Complete specific tasks quickly', 'Learn essential features only', 'Minimize time investment']
-    }
+  // Calculate average churn risk for each segment
+  const avgChurnRisk: Record<UserSegment, number> = {
+    power: usersBySegment.power.length > 0 
+      ? usersBySegment.power.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.power.length 
+      : 0.15,
+    atrisk: usersBySegment.atrisk.length > 0 
+      ? usersBySegment.atrisk.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.atrisk.length 
+      : 0.85,
+    occasional: usersBySegment.occasional.length > 0 
+      ? usersBySegment.occasional.reduce((sum, user) => sum + user.churnRisk, 0) / usersBySegment.occasional.length 
+      : 0.45
   };
   
-  const randomNames = [
-    'Alex', 'Bailey', 'Casey', 'Dana', 'Ellis', 
-    'Francis', 'Glenn', 'Harper', 'Ivy', 'Jordan'
+  console.log('📊 Average churn risk by segment:', avgChurnRisk);
+  
+  // Sort users by churn risk (highest first)
+  const sortedUsersBySegment: Record<UserSegment, UserData[]> = {
+    power: [...usersBySegment.power].sort((a, b) => b.churnRisk - a.churnRisk),
+    atrisk: [...usersBySegment.atrisk].sort((a, b) => b.churnRisk - a.churnRisk),
+    occasional: [...usersBySegment.occasional].sort((a, b) => b.churnRisk - a.churnRisk)
+  };
+  
+  // Map users to PersonaUser format
+  const mappedUsersBySegment: Record<UserSegment, PersonaUser[]> = {
+    power: sortedUsersBySegment.power.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    })),
+    atrisk: sortedUsersBySegment.atrisk.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    })),
+    occasional: sortedUsersBySegment.occasional.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLogin: user.lastLogin,
+      churnRisk: user.churnRisk
+    }))
+  };
+  
+  generatedPersonas = [
+    {
+      id: uuidv4(),
+      name: 'Power Partner Patty',
+      segment: 'power',
+      description: 'Daily user who relies on your product for critical work tasks. Engaged with most features and has a high feature adoption rate.',
+      painPoints: ['Complex workflows', 'Performance issues'],
+      goals: ['Save time', 'Improve workflow efficiency'],
+      churnRisk: avgChurnRisk.power,
+      users: mappedUsersBySegment.power
+    },
+    {
+      id: uuidv4(),
+      name: 'At-Risk Andy',
+      segment: 'atrisk',
+      description: 'Previously active user whose engagement has declined over the past month. Hasn\'t logged in for 14 days.',
+      painPoints: ['Confusing interface', 'Missing features', 'Technical issues'],
+      goals: ['Simplify daily tasks', 'Better support'],
+      churnRisk: avgChurnRisk.atrisk,
+      users: mappedUsersBySegment.atrisk
+    },
+    {
+      id: uuidv4(),
+      name: 'Occasional Olivia',
+      segment: 'occasional',
+      description: 'Logs in infrequently, typically once every few weeks. Only uses a small subset of features.',
+      painPoints: ['Forgetting how to use features', 'Value perception'],
+      goals: ['Quick, occasional tasks', 'Easy reengagement'],
+      churnRisk: avgChurnRisk.occasional,
+      users: mappedUsersBySegment.occasional
+    }
   ];
   
-  for (const segment of Object.keys(usersBySegment) as UserSegment[]) {
-    const usersInSegment = usersBySegment[segment];
-    if (usersInSegment.length === 0) continue;
-    
-    // Calculate average churn risk for the segment
-    const avgChurnRisk = usersInSegment.reduce((sum, user) => sum + user.churnRisk, 0) / usersInSegment.length;
-    
-    // Get template for this segment
-    const template = personaTemplates[segment];
-    
-    // Generate name
-    const prefix = template.namePrefix[Math.floor(Math.random() * template.namePrefix.length)];
-    const name = randomNames[Math.floor(Math.random() * randomNames.length)];
-    const personaName = `${prefix} ${name}`;
-    
-    personas.push({
-      id: uuidv4(),
-      name: personaName,
-      segment,
-      description: template.description,
-      painPoints: template.painPoints,
-      goals: template.goals,
-      churnRisk: avgChurnRisk
-    });
-  }
-  
-  generatedPersonas = personas;
-  console.log(`✅ Generated ${personas.length} fallback personas`);
+  console.log(`✅ Generated ${generatedPersonas.length} fallback personas with real user data`);
 };
 
 /**
@@ -773,6 +815,7 @@ const generateFallbackPersonas = (): void => {
  * 2. Description in "As a user, I want to... so that..." format
  * 3. Acceptance criteria for implementation
  * 4. Priority based on persona segment
+ * 5. References to actual users from the persona
  */
 const generateUserStories = async (): Promise<void> => {
   console.log('📝 Starting user story generation...');
@@ -792,7 +835,9 @@ const generateUserStories = async (): Promise<void> => {
     console.log('✅ Text generation model initialized successfully');
   } catch (error) {
     console.error('❌ Failed to initialize text generation model:', error);
-    throw new Error('Failed to initialize text generation model');
+    console.log('🔄 Falling back to template-based story generation');
+    generateFallbackStories();
+    return;
   }
   
   const storyTypes = {
@@ -803,6 +848,15 @@ const generateUserStories = async (): Promise<void> => {
   
   for (const persona of generatedPersonas) {
     console.log(`📝 Generating story for persona: ${persona.name} (${persona.segment})`);
+    
+    // Get actual users for this persona
+    const actualUsers = persona.users || [];
+    const hasActualUsers = actualUsers.length > 0;
+    
+    // Select a random user from the persona if available
+    const randomUser = hasActualUsers 
+      ? actualUsers[Math.floor(Math.random() * actualUsers.length)]
+      : null;
     
     const storyTypeOptions = storyTypes[persona.segment] || storyTypes.occasional;
     const storyType = storyTypeOptions[Math.floor(Math.random() * storyTypeOptions.length)];
@@ -829,7 +883,11 @@ const generateUserStories = async (): Promise<void> => {
     }
     
     // Generate story description using "As a user, I want to... so that..." format
-    const descriptionPrompt = `As ${persona.name}, I want`;
+    // Include reference to actual user if available
+    const descriptionPrompt = hasActualUsers && randomUser
+      ? `As ${persona.name} (representing users like ${randomUser.name}), I want`
+      : `As ${persona.name}, I want`;
+    
     let description: string;
     
     try {
@@ -880,6 +938,18 @@ const generateUserStories = async (): Promise<void> => {
       criteria.push('Performance metrics remain stable');
     }
     
+    // Add a criterion about actual users if available
+    if (hasActualUsers && criteria.length < 5) {
+      const userCount = actualUsers.length;
+      const highRiskCount = actualUsers.filter(user => user.churnRisk > 0.7).length;
+      
+      if (highRiskCount > 0) {
+        criteria.push(`Solution addresses needs of ${highRiskCount} high-risk users in this persona group`);
+      }
+      
+      criteria.push(`Implementation should be validated with feedback from actual users in this persona group (${userCount} users available)`);
+    }
+    
     // Assign priority based on persona segment
     const priority = persona.segment === 'atrisk' 
       ? 'high' 
@@ -908,6 +978,7 @@ const generateUserStories = async (): Promise<void> => {
  * 
  * Creates template-based user stories for each persona
  * with predefined titles, descriptions and acceptance criteria
+ * that reference actual users from the persona
  */
 const generateFallbackStories = (): void => {
   console.log('🔄 Generating fallback user stories...');
@@ -984,9 +1055,46 @@ const generateFallbackStories = (): void => {
   };
   
   for (const persona of generatedPersonas) {
+    // Get actual users for this persona
+    const actualUsers = persona.users || [];
+    const hasActualUsers = actualUsers.length > 0;
+    
+    // Select a random user from the persona if available
+    const randomUser = hasActualUsers 
+      ? actualUsers[Math.floor(Math.random() * actualUsers.length)]
+      : null;
+    
     // Get template for this segment
     const templates = storyTemplates[persona.segment];
     const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    // Modify description to include reference to actual user if available
+    let description = template.description;
+    if (hasActualUsers && randomUser) {
+      // Replace the generic "As a power user" with "As Power Partner Patty (representing users like John Smith)"
+      const genericStart = description.match(/^As an? [^,]+/);
+      if (genericStart) {
+        description = description.replace(
+          genericStart[0], 
+          `As ${persona.name} (representing users like ${randomUser.name})`
+        );
+      }
+    }
+    
+    // Create a copy of the criteria
+    const criteria = [...template.criteria];
+    
+    // Add criteria about actual users if available
+    if (hasActualUsers) {
+      const userCount = actualUsers.length;
+      const highRiskCount = actualUsers.filter(user => user.churnRisk > 0.7).length;
+      
+      if (highRiskCount > 0) {
+        criteria.push(`Solution addresses needs of ${highRiskCount} high-risk users in this persona group`);
+      }
+      
+      criteria.push(`Implementation should be validated with feedback from actual users in this persona group (${userCount} users available)`);
+    }
     
     // Assign priority based on persona segment
     const priority = persona.segment === 'atrisk' 
@@ -999,14 +1107,14 @@ const generateFallbackStories = (): void => {
       id: uuidv4(),
       personaId: persona.id,
       title: template.title,
-      description: template.description,
+      description,
       priority,
-      acceptanceCriteria: template.criteria
+      acceptanceCriteria: criteria
     });
   }
   
   generatedStories = stories;
-  console.log(`✅ Generated ${stories.length} fallback user stories`);
+  console.log(`✅ Generated ${stories.length} fallback user stories with references to actual users`);
 };
 
 /**
@@ -1346,4 +1454,12 @@ export const getGeneratedInsights = (): Insight[] => {
 // For testing, create some initial data if needed
 export const hasGeneratedData = (): boolean => {
   return processedUserData.length > 0;
+};
+
+/**
+ * Get the processed user data
+ * @returns Array of UserData objects
+ */
+export const getGeneratedUserData = (): UserData[] => {
+  return [...processedUserData];
 };

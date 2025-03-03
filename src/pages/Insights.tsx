@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import InsightCard from '@/components/ui/InsightCard';
@@ -9,6 +8,7 @@ import { Download, RefreshCcw, TrendingDown, AlertTriangle, Info } from 'lucide-
 import { getGeneratedInsights, getGeneratedMetrics, hasGeneratedData } from '@/utils/dataProcessor';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import ExportPDF from '@/components/ui/ExportPDF';
 
 // Custom tooltip for the feature usage chart
 const FeatureTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
@@ -232,27 +232,19 @@ const Insights = () => {
       <Navbar />
       
       <main className="container mx-auto px-4 pt-24 pb-12">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Churn Insights</h1>
-            <p className="text-muted-foreground">AI-generated recommendations to reduce churn and improve retention</p>
+            <h1 className="text-3xl font-bold mb-2">Insights</h1>
+            <p className="text-muted-foreground">Actionable insights to reduce churn and improve retention</p>
           </div>
           
-          <div className="flex items-center gap-3">
-            <button 
-              className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-              onClick={handleRefreshInsights}
-            >
+          <div className="flex items-center gap-2 mt-4 md:mt-0">
+            <button className="flex items-center gap-1 px-3 py-2 rounded-md border border-input bg-background text-sm hover:bg-accent">
               <RefreshCcw className="h-4 w-4" />
-              <span>Refresh Insights</span>
+              <span>Refresh</span>
             </button>
-            <button 
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-              onClick={handleExportReport}
-            >
-              <Download className="h-4 w-4" />
-              <span>Export Report</span>
-            </button>
+            
+            <ExportPDF />
           </div>
         </div>
         

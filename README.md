@@ -59,6 +59,26 @@ This project is built with .
 - React
 - shadcn-ui
 - Tailwind CSS
+- jsPDF (for PDF generation)
+- jspdf-autotable (for table generation in PDFs)
+
+## Features
+
+### PDF Export
+The application includes a comprehensive PDF export feature that allows users to generate and download various types of reports:
+- Complete Report (all data)
+- Personas Report (personas and stories)
+- Insights Report (metrics and insights)
+- Individual Persona Reports (detailed reports for specific personas)
+
+All PDF generation occurs in the browser, ensuring user data privacy and security. For more details, see [PDF_EXPORT_README.md](PDF_EXPORT_README.md).
+
+### Data-Driven User Personas
+The application creates user personas that are directly connected to your actual user data:
+- Each persona is associated with real users from your uploaded data
+- User stories reference actual users, making them more concrete and actionable
+- Reports include metrics about users in each persona and their churn risk levels
+- This creates a direct connection between your data and the generated insights
 
 ## How can I deploy this project?
 

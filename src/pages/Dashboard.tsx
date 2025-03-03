@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import ChurnMetric from '@/components/ui/ChurnMetric';
@@ -16,6 +15,7 @@ import {
 } from '@/utils/dataProcessor';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import ExportPDF from '@/components/ui/ExportPDF';
 
 const Dashboard = () => {
   const [selectedStory, setSelectedStory] = useState<UserStory | null>(null);
@@ -58,6 +58,10 @@ const Dashboard = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
           <p className="text-muted-foreground">Overview of your user churn metrics and key personas</p>
+        </div>
+        
+        <div className="flex justify-end mb-4">
+          <ExportPDF />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
